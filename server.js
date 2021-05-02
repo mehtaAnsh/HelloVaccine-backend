@@ -28,17 +28,44 @@ MongoClient.connect(
 		*/
 
 		app.post('/mail', (req, res, next) => {
-			const email = req.body.email;
+			const { email, pincode, date } = req.body;
+
 			const OTP = functions.generateOTP();
 
 			functions.sendEmail(email, 'HelloVaccine OTP', `OTP for HelloVaccine is ${OTP}.`, err => {
 				if (err) console.log(err);
 			});
 
-			/* Save OTP in DB */
 			const usersCollection = db.collection('users');
-			usersCollection.insertOne({ email, OTP }).catch(err => console.log(err));
+			usersCollection.insertOne({ email, OTP, pincode, date }).catch(err => console.log(err));
 			res.json({ status: 200, message: 'Email sent successfully!' });
+		});
+
+		app.post('/verifyOTP', async (req, res, next) => {
+			const { email, OTP } = req.body;
+
+			const usersCollection = db.collection('users');
+			var obj = await usersCollection.findOne({ email });
+
+			if (!obj) res.status(500).json({ message: 'E-mail not found' });
+
+			if (obj.OTP == Number(OTP)) {
+				await usersCollection.updateOne(
+					{ email },
+					{
+						$set: {
+							email,
+							pincode: obj.pincode,
+							date: obj.date,
+							isVerified: true,
+						},
+					},
+					{ new: true }
+				);
+				res.json({ status: 200, message: 'Verified' });
+			} else {
+				res.status(401).json({ message: 'OTP wrong' });
+			}
 		});
 
 		app.listen(port, () => {
