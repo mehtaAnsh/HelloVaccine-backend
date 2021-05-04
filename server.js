@@ -2,10 +2,11 @@ require('dotenv').config();
 
 const express = require('express');
 const app = express();
+const cors = require('cors');
 const port = process.env.PORT || 5000;
 const functions = require('./functions');
-const mongoose = require('mongoose');
 
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded());
 
@@ -27,21 +28,56 @@ MongoClient.connect(
 			.then(results => console.log(results));
 		*/
 
-		app.post('/mail', (req, res, next) => {
-			const { email, pincode, date } = req.body;
+		app.post('/mail', async (req, res, next) => {
+			if (!req.body.email || !req.body.pin || !req.body.date) {
+				res.status(500).json({ message: 'Parameters missing' });
+			}
 
+			const { email, pin, date } = req.body;
 			const OTP = functions.generateOTP();
 
-			functions.sendEmail(email, 'HelloVaccine OTP', `OTP for HelloVaccine is ${OTP}.`, err => {
-				if (err) console.log(err);
-			});
-
-			const usersCollection = db.collection('users');
-			usersCollection.insertOne({ email, OTP, pincode, date }).catch(err => console.log(err));
-			res.json({ status: 200, message: 'Email sent successfully!' });
+			const usersCollection = await db.collection('users');
+			const temp = await usersCollection.findOne({ email });
+			temp
+				? await usersCollection
+						.findOneAndUpdate(
+							{ email },
+							{
+								$set: {
+									OTP,
+									pin,
+									date,
+									isVerified: false,
+								},
+							}
+						)
+						.then(dbres => {
+							console.log('updated');
+							if (dbres.ok) {
+								functions.sendEmail(
+									email,
+									'HelloVaccine OTP',
+									`OTP for HelloVaccine is ${OTP}.`,
+									err => {
+										if (err) res.status(500).json({ message: 'Email server error.' });
+									}
+								);
+								res.status(200).json({ message: 'Email sent successfully!' });
+							} else res.status(500).json({ message: 'Database error.' });
+						})
+				: await usersCollection
+						.insertOne({ email, OTP, pin, date, isVerified: false })
+						.then(() => {
+							functions.sendEmail(email, 'HelloVaccine OTP', `OTP for HelloVaccine is ${OTP}.`, err => {
+								if (err) console.log(err);
+							});
+							res.status(200).json({ message: 'Email sent successfully!' });
+						})
+						.catch(err => console.log(err));
 		});
 
 		app.post('/verifyOTP', async (req, res, next) => {
+			console.log(req.body);
 			const { email, OTP } = req.body;
 
 			const usersCollection = db.collection('users');
@@ -55,9 +91,10 @@ MongoClient.connect(
 					{
 						$set: {
 							email,
-							pincode: obj.pincode,
-							date: obj.date,
 							isVerified: true,
+						},
+						$unset: {
+							OTP,
 						},
 					},
 					{ new: true }

@@ -13,13 +13,13 @@ exports.sendEmail = function (email, subjectLine, slotDetails, callback) {
 		from: String('Vaccine Checker ' + process.env.EMAIL),
 		to: email,
 		subject: subjectLine,
-		text: 'Vaccine available. Details: \n\n' + slotDetails,
+		text: slotDetails,
 	};
 	nodemailerTransporter.sendMail(options, (error, info) => {
 		if (error) {
 			return callback(error);
 		}
-		callback(error, info);
+		return callback(error, info);
 	});
 };
 
