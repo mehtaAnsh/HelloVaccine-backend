@@ -1,18 +1,19 @@
-const momemt = require('moment');
+const moment = require('moment');
 const cron = require('node-cron');
 const axios = require('axios');
 const functions = require('./functions');
 
-const config = (pin, date) => {
+const setConfig = (pin, date) => {
 	return {
 		method: 'GET',
-		url: `https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/findByPin?pincode=${pin}&date=${date}`,
+		url: `https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByPin?pincode=${pin}&date=${date}`,
 		headers: {
 			accept: 'application/json',
-			'Accept-Language': 'hi_IN',
 		},
 	};
 };
+
+var mapWithPin = {};
 
 const main = async () => {
 	try {
@@ -24,32 +25,76 @@ const main = async () => {
 };
 
 const checkAvailability = async () => {
-	/* get mail contents from DB */
+	const MongoClient = require('mongodb').MongoClient;
+	MongoClient.connect(
+		'mongodb+srv://anshm:NcuAQEwPpeA6bgRe@hellovaccine.334w6.mongodb.net/myFirstDatabase?retryWrites=true&w=majority',
+		{ useUnifiedTopology: true }
+	).then(async client => {
+		console.log('Connected to DB');
 
-	getSlots();
+		const db = client.db('users');
+
+		var pincodeArr = [];
+
+		await db
+			.collection('users')
+			.find({ isVerified: true })
+			.forEach(doc => {
+				const temp = { email: doc.email, age: doc.age };
+				mapWithPin[doc.pin]
+					? (mapWithPin[doc.pin] = [...mapWithPin[doc.pin], temp])
+					: (mapWithPin[doc.pin] = [temp]);
+
+				if (!pincodeArr.includes(doc.pin)) pincodeArr[pincodeArr.length] = doc.pin;
+			})
+			.then(() => {
+				console.log('arr: ', pincodeArr);
+				console.log(mapWithPin);
+
+				pincodeArr.map(async pin => {
+					await getSlots(pin, moment().format('DD-MM-YYYY'));
+				});
+
+				res.json({ message: 'Done' });
+			});
+	});
 };
 
-const getSlots = async () => {
-	axios(config)
+const getSlots = async (pin, date) => {
+	const config = setConfig(pin, date);
+	let validCenters = { before45: [], after45: [] };
+
+	await axios(config)
 		.then(function (slots) {
-			let sessions = slots.data.sessions;
-			let validSlots = sessions.filter(slot => slot.min_age_limit <= AGE && slot.available_capacity > 0);
-			if (validSlots.length > 0) {
-				sendMail(validSlots);
-			}
+			let centers = slots.data.centers;
+			centers.forEach(center => {
+				const temp = center.sessions.filter(session => session.available_capacity === 0);
+				if (temp.length > 0) {
+					center.sessions[0].min_age_limit < 45
+						? (validCenters['before45'] = [...validCenters['before45'], center])
+						: (validCenters['after45'] = [...validCenters['after45'], center]);
+				}
+			});
+
+			mapWithPin[pin].map(({ email, age }) => {
+				slotDetails = age < 45 ? validCenters.before45 : validCenters.after45;
+				if (slotDetails.length > 1)
+					functions.sendEmail(
+						email,
+						'VACCINE AVAILABLE',
+						JSON.stringify(slotDetails, null, '\t'),
+						(err, result) => {
+							if (err) {
+								console.error({ err });
+							}
+						}
+					);
+			});
+			delete mapWithPin[pin];
 		})
 		.catch(function (error) {
 			console.log(error);
 		});
-};
-
-const sendMail = async () => {
-	let slotDetails = JSON.stringify(validSlots, null, '\t');
-	functions.sendEmail(EMAIL, 'VACCINE AVAILABLE', slotDetails, (err, result) => {
-		if (err) {
-			console.error({ err });
-		}
-	});
 };
 
 main().then(() => console.log('started!'));
