@@ -7,12 +7,13 @@ const app = express();
 const cors = require('cors');
 const port = process.env.PORT || 5000;
 const functions = require('./functions');
+const notifier = require('./notifier');
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-/* testData
+/*
 var mapWithPin = {};
 const setConfig = (pin, date) => {
 	return {
@@ -24,91 +25,42 @@ const setConfig = (pin, date) => {
 	};
 };
 const getSlots = async (pin, date) => {
-	const slots = {
-		centers: [
-			{
-				center_id: 549109,
-				name: 'THUNGA HOSPITAL MIRA ROAD',
-				address: 'Near Raymond Showroom, Mira Bhayander Road.',
-				state_name: 'Maharashtra',
-				district_name: 'Thane',
-				block_name: 'Mira Bhayander Municipal Corporation',
-				pincode: 401107,
-				lat: 19,
-				long: 72,
-				from: '09:00:00',
-				to: '17:00:00',
-				fee_type: 'Paid',
-				sessions: [
-					{
-						session_id: '0cd8b825-acfd-4a28-9124-c59a7de1e48d',
-						date: '05-05-2021',
-						available_capacity: 0,
-						min_age_limit: 45,
-						vaccine: 'COVISHIELD',
-						slots: ['09:00AM-11:00AM', '11:00AM-01:00PM', '01:00PM-03:00PM', '03:00PM-05:00PM'],
-					},
-					{
-						session_id: 'e8d6a78a-9160-44f4-badd-abafae0de8ce',
-						date: '06-05-2021',
-						available_capacity: 0,
-						min_age_limit: 45,
-						vaccine: 'COVISHIELD',
-						slots: ['09:00AM-11:00AM', '11:00AM-01:00PM', '01:00PM-03:00PM', '03:00PM-05:00PM'],
-					},
-				],
-			},
-			{
-				center_id: 680751,
-				name: 'Mbmc Indira Gandhi',
-				address: 'Poonam Sagar Opp Allahabad Bank Mira Road East',
-				state_name: 'Maharashtra',
-				district_name: 'Thane',
-				block_name: 'Mira Bhayander Municipal Corporation',
-				pincode: 401107,
-				lat: 19,
-				long: 72,
-				from: '09:00:00',
-				to: '16:00:00',
-				fee_type: 'Free',
-				sessions: [
-					{
-						session_id: 'de8094b2-e3e6-49c4-9327-612077c18ee0',
-						date: '06-05-2021',
-						available_capacity: 0,
-						min_age_limit: 45,
-						vaccine: 'COVAXIN',
-						slots: ['09:00AM-11:00AM', '11:00AM-01:00PM', '01:00PM-03:00PM', '03:00PM-04:00PM'],
-					},
-				],
-			},
-			{
-				center_id: 551889,
-				name: 'B. Indira Gandhi Hospital',
-				address: 'Poonam Sagar Nr Alahabad Bnak Mira Road East',
-				state_name: 'Maharashtra',
-				district_name: 'Thane',
-				block_name: 'Mira Bhayander Municipal Corporation',
-				pincode: 401107,
-				lat: 19,
-				long: 72,
-				from: '09:00:00',
-				to: '16:00:00',
-				fee_type: 'Free',
-				sessions: [
-					{
-						session_id: 'd72839d9-a888-4bfc-8d26-256aa0f4d6cf',
-						date: '06-05-2021',
-						available_capacity: 0,
-						min_age_limit: 45,
-						vaccine: 'COVISHIELD',
-						slots: ['09:00AM-11:00AM', '11:00AM-01:00PM', '01:00PM-03:00PM', '03:00PM-04:00PM'],
-					},
-				],
-			},
-		],
-	};
+	const config = setConfig(pin, date);
+	let validCenters = { before45: [], after45: [] };
 
+	await axios(config)
+		.then(function (slots) {
+			console.log(slots);
+			let centers = slots.data.centers;
+			centers.forEach(center => {
+				const temp = center.sessions.filter(session => session.available_capacity === 0);
+				if (temp.length > 0) {
+					center.sessions[0].min_age_limit < 45
+						? (validCenters['before45'] = [...validCenters['before45'], center])
+						: (validCenters['after45'] = [...validCenters['after45'], center]);
+				}
+			});
+
+			mapWithPin[pin].map(({ email, age }) => {
+				slotDetails = age < 45 ? validCenters.before45 : validCenters.after45;
+				if (slotDetails.length > 1)
+					functions.sendEmail(
+						email,
+						'VACCINE AVAILABLE',
+						JSON.stringify(slotDetails, null, '\t'),
+						(err, result) => {
+							if (err) {
+								console.error({ err });
+							}
+						}
+					);
+			});
+			delete mapWithPin[pin];
+		})
+		.catch(function (error) {
+			console.log(error);
+		});
+	/* local testing
 	let centers = slots.centers;
 	let validCenters = { before45: [], after45: [] };
 	centers.forEach(center => {
@@ -130,37 +82,7 @@ const getSlots = async (pin, date) => {
 			});
 	});
 	delete mapWithPin[pin];
-	/*
-	const config = setConfig(pin, date);
-	await axios(config)
-		.then(function (slots) {
-			let centers = slots.data.centers;
-			let validSlots = [];
-			centers.forEach(center => {
-				const temp = center.sessions.filter(session => session.available_capacity == 0);
-				if (temp.length > 0
-					&&mapWithPin[center.pincode] {
-				mapWithPin[center.pincode].map(email => {
-					functions.sendEmail(
-						email,
-						'VACCINE AVAILABLE',
-						JSON.stringify(center, null, '\t'),
-						(err, result) => {
-							if (err) {
-								console.error({ err });
-							}
-						}
-					);
-				});
-				delete mapWithPin[center.pincode];
-					
-				}
-			});
-			return validSlots;
-		})
-		.catch(function (error) {
-			console.log(error);
-		});
+	
 };
 */
 const MongoClient = require('mongodb').MongoClient;
@@ -175,7 +97,8 @@ MongoClient.connect(
 		const usersCollection = db.collection('users');
 
 		/* testing routes */
-		/* app.post('/test', async (req, res, next) => {
+		/*
+		app.post('/test', async (req, res, next) => {
 			var pincodeArr = [];
 
 			await usersCollection
@@ -198,7 +121,7 @@ MongoClient.connect(
 
 					res.json({ message: 'Done' });
 				});
-		}); */
+		});*/
 
 		app.post('/mail', async (req, res, next) => {
 			if (!req.body.email || !req.body.pin || !req.body.date || !req.body.age) {
@@ -277,6 +200,8 @@ MongoClient.connect(
 				res.status(401).json({ message: 'OTP wrong' });
 			}
 		});
+
+		notifier().then(() => console.log('Cronjob started!'));
 
 		app.listen(port, () => {
 			console.log(`Example app listening at http://localhost:${port}`);

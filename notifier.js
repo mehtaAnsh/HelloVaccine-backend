@@ -17,7 +17,7 @@ var mapWithPin = {};
 
 const main = async () => {
 	try {
-		cron.schedule('* * * *', async () => await checkAvailability());
+		cron.schedule('20 * * * *', async () => await checkAvailability());
 	} catch (e) {
 		console.log('An error occured.');
 		throw e;
@@ -35,6 +35,7 @@ const checkAvailability = async () => {
 		const db = client.db('users');
 
 		var pincodeArr = [];
+		mapWithPin = {};
 
 		await db
 			.collection('users')
@@ -55,7 +56,7 @@ const checkAvailability = async () => {
 					await getSlots(pin, moment().format('DD-MM-YYYY'));
 				});
 
-				res.json({ message: 'Done' });
+				console.log('Done');
 			});
 	});
 };
@@ -66,6 +67,7 @@ const getSlots = async (pin, date) => {
 
 	await axios(config)
 		.then(function (slots) {
+			console.log(slots);
 			let centers = slots.data.centers;
 			centers.forEach(center => {
 				const temp = center.sessions.filter(session => session.available_capacity === 0);
@@ -97,4 +99,6 @@ const getSlots = async (pin, date) => {
 		});
 };
 
-main().then(() => console.log('started!'));
+//main().then(() => console.log('Cronjob started!'));
+
+module.exports = main;
