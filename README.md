@@ -1,4 +1,4 @@
-# HelloVaccine backend
+# HelloVaccine - Backend
 
 A subscription-based portal which will send you mails when the vaccine would be available.
 
